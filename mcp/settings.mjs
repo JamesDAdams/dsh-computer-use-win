@@ -16,6 +16,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   browserFirst: true, browserVisible: true, browserApp: 'default', browserSignIn: false, browserAttachUser: false, progressOverlayEnabled: true, progressOverlayMode: 'source',
   progressOverlayOpacity: 60, progressOverlayWidth: 360, progressOverlayHeight: 240, progressOverlayPosition: 'top-right', progressOverlayX: 80, progressOverlayY: 80, progressOverlayLocked: true, progressLockShortcut: '', progressPreviewToken: 0,
   mode: 'full', toolPreset: 'auto', enabledTools: TOOL_NAMES, indicatorEnabled: true, cursorIndicatorEnabled: true, remoteIndicatorVisible: true, indicatorText: 'DSH 正在控制电脑',
+  // Language of the on-screen overlay copy (banner, pointer tag, progress
+  // overlay). 'auto' follows the DSH interface language.
+  overlayLanguage: 'auto',
   indicatorPosition: 'top', indicatorIdleMs: 800, stopShortcut: '', communityNote: 'full',
   resumeToken: 0, previewToken: 0
 });
@@ -41,7 +44,7 @@ export function normalizeStopShortcut(value) {
 // back to their defaults and unknown tool names are dropped; each change is
 // returned so it can be reported. Values typed on the settings page (shortcut,
 // text, numbers) stay strict, so a mistyped one is still refused when saved.
-const SETTING_CHOICES = { mode: ['lite', 'full'], toolPreset: ['auto', 'full', 'lite', 'lazy', 'custom'], browserApp: BROWSER_APPS, indicatorPosition: ['top', 'bottom'], communityNote: ['full', 'link'] };
+const SETTING_CHOICES = { mode: ['lite', 'full'], toolPreset: ['auto', 'full', 'lite', 'lazy', 'custom'], browserApp: BROWSER_APPS, indicatorPosition: ['top', 'bottom'], communityNote: ['full', 'link'], overlayLanguage: ['auto', 'zh', 'en'] };
 const SETTING_SWITCHES = ['browserFirst', 'browserVisible', 'browserSignIn', 'browserAttachUser', 'progressOverlayEnabled', 'indicatorEnabled', 'cursorIndicatorEnabled', 'remoteIndicatorVisible'];
 SETTING_SWITCHES.push('progressOverlayLocked');
 SETTING_CHOICES.progressOverlayPosition = ['top-right','top-left','bottom-right','bottom-left','custom'];
@@ -89,6 +92,7 @@ export function normalizeSettings(input = {}) {
   if (!SETTING_CHOICES.progressOverlayPosition.includes(value.progressOverlayPosition)) throw new Error('Invalid progressOverlayPosition');
   if (!SETTING_CHOICES.progressOverlayMode.includes(value.progressOverlayMode)) throw new Error('Invalid progressOverlayMode');
   if (!['full', 'link'].includes(value.communityNote)) throw new Error('communityNote must be full or link');
+  if (!SETTING_CHOICES.overlayLanguage.includes(value.overlayLanguage)) throw new Error('overlayLanguage must be auto, zh or en');
   for (const key of ['resumeToken', 'previewToken', 'progressPreviewToken']) {
     if (!Number.isSafeInteger(value[key]) || value[key] < 0) throw new Error(`${key} must be a nonnegative integer`);
   }

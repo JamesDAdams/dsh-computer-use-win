@@ -42,7 +42,7 @@ window.__ModuleLoader__.load({
       ]]
     ];
     const liteToolNames='list_windows find click scroll type_text keypress ocr screenshot wait_for launch_app batch tools'.split(' ');
-    const defaults = {browserFirst:true,browserVisible:true,browserApp:'default',browserSignIn:false,browserAttachUser:false,progressOverlayEnabled:true,progressOverlayOpacity:60,progressOverlayWidth:360,progressOverlayHeight:240,progressOverlayPosition:'top-right',progressOverlayX:80,progressOverlayY:80,progressOverlayLocked:true,progressLockShortcut:'',toolPreset:'full',enabledTools:allToolNames,indicatorEnabled:true,cursorIndicatorEnabled:true,remoteIndicatorVisible:true,indicatorText:'DSH 正在控制电脑',indicatorPosition:'top',indicatorIdleMs:800,stopShortcut:''};
+    const defaults = {browserFirst:true,browserVisible:true,browserApp:'default',browserSignIn:false,browserAttachUser:false,progressOverlayEnabled:true,progressOverlayOpacity:60,progressOverlayWidth:360,progressOverlayHeight:240,progressOverlayPosition:'top-right',progressOverlayX:80,progressOverlayY:80,progressOverlayLocked:true,progressLockShortcut:'',toolPreset:'full',enabledTools:allToolNames,indicatorEnabled:true,cursorIndicatorEnabled:true,remoteIndicatorVisible:true,overlayLanguage:'auto',indicatorText:'DSH 正在控制电脑',indicatorPosition:'top',indicatorIdleMs:800,stopShortcut:''};
     const equal=(left,right)=>JSON.stringify(left)===JSON.stringify(right);
     defaults.progressOverlayMode='source';
     const dictionaries = {
@@ -71,8 +71,10 @@ window.__ModuleLoader__.load({
     for(const entries of toolGroups.map(group=>group[1]))for(const [name,zh,en,zhHint,enHint]of entries){dictionaries.zh['tool_'+name]=zh;dictionaries.en['tool_'+name]=en;dictionaries.zh['toolHint_'+name]=zhHint;dictionaries.en['toolHint_'+name]=enHint;}
     Object.assign(dictionaries.zh,{toolsHint:'先选择整体加载方案，需要逐项调整时选择“自定义”。',full:'全部',fullSummary:'加载全部桌面工具，默认推荐',lite:'精简',liteSummary:'只加载常用工具，减少上下文占用',custom:'自定义',customSummary:'自己选择需要加载的工具',customTools:'自定义工具清单',allTools:'全选',customMemory:'切换方案会保留自定义清单。更改后点击保存。',lazy:'懒启动',lazySummary:'启动只加载管理入口，桌面工具按需加载',lazyCount:'启动 1 项 · 允许全部 '+allToolNames.length+' 项',lazyHint:'开始桌面任务时，agent 先加载所需工具，会多一次工具调用。已加载工具仍占用上下文。'});
     Object.assign(dictionaries.en,{toolsHint:'Choose a loading preset. Select Custom to choose individual tools.',full:'All',fullSummary:'Load every desktop tool; the default',lite:'Lite',liteSummary:'Common tools with less context',custom:'Custom',customSummary:'Choose exactly which tools to load',customTools:'Custom tool selection',allTools:'Select all',customMemory:'Switching presets keeps your custom selection. Save to apply.',lazy:'Lazy',lazySummary:'Start with management only; load desktop tools on demand',lazyCount:'1 at startup · all '+allToolNames.length+' allowed',lazyHint:'The agent loads tools before a desktop task, adding a tool call. Loaded tools still use context.'});
-    Object.assign(dictionaries.zh,{remoteVisible:'远程与录屏可见',remoteVisibleHint:'让 UU 远程、屏幕共享和录屏看到接管提示、鼠标标识和思考与操作浮窗。默认开启，此时屏幕共享和录屏都能看到浮窗内容，包括模型的思考和回复；关闭后请求 Windows 把它们排除在捕获之外。也适用于虚拟屏幕。'});
-    Object.assign(dictionaries.en,{remoteVisible:'Visible in remote sessions and recordings',remoteVisibleHint:'Show the takeover indicator, the pointer marker and the reasoning and progress overlay in remote access, screen sharing and recordings. On by default, so screen sharing and recordings see the overlay text, including the model’s reasoning and replies; turning it off asks Windows to exclude them from capture. Also applies to virtual displays.'});
+    Object.assign(dictionaries.zh,{remoteVisible:'远程与录屏可见',remoteVisibleHint:'让 UU 远程、屏幕共享和录屏看到接管提示、鼠标标识和思考与操作浮窗。默认开启，此时屏幕共享和录屏都能看到浮窗内容，包括模型的思考和回复；关闭后请求 Windows 把它们排除在捕获之外。也适用于虚拟屏幕。',
+      overlayLanguage:'浮窗与提示语言',overlayLanguageHint:'接管提示条、鼠标标签和思考与操作浮窗上的文字语言。“自动”跟随 DSH 界面语言；修改后会在当前动作结束时生效。',overlayLanguage_auto:'自动（跟随 DSH 界面）',overlayLanguage_zh:'简体中文',overlayLanguage_en:'English',indicatorTextDefault:'DSH 正在控制电脑'});
+    Object.assign(dictionaries.en,{remoteVisible:'Visible in remote sessions and recordings',remoteVisibleHint:'Show the takeover indicator, the pointer marker and the reasoning and progress overlay in remote access, screen sharing and recordings. On by default, so screen sharing and recordings see the overlay text, including the model’s reasoning and replies; turning it off asks Windows to exclude them from capture. Also applies to virtual displays.',
+      overlayLanguage:'Overlay language',overlayLanguageHint:'Language of the takeover banner, the pointer tag and the reasoning and progress overlay. Automatic follows the DSH interface language. A change applies after the current action finishes.',overlayLanguage_auto:'Automatic (follow DSH)',overlayLanguage_zh:'简体中文',overlayLanguage_en:'English',indicatorTextDefault:'DSH is controlling the computer'});
     function shortcutFromEvent(event) {
       const code=event.code||'',special={Space:'Space',Enter:'Enter',NumpadEnter:'Enter',Tab:'Tab',Backspace:'Backspace',Delete:'Delete',Insert:'Insert',Home:'Home',End:'End',PageUp:'PageUp',PageDown:'PageDown',ArrowUp:'Up',ArrowDown:'Down',ArrowLeft:'Left',ArrowRight:'Right',Pause:'Pause',CapsLock:'CapsLock',NumLock:'NumLock',ScrollLock:'ScrollLock'};
       let key=/^Key[A-Z]$/.test(code)?code.slice(3):/^Digit[0-9]$/.test(code)?code.slice(5):/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)?code:special[code];
@@ -402,11 +404,16 @@ window.__ModuleLoader__.load({
       if((state.status!==undefined&&state.status!=='ready')||!state.value)return h(props.as,{'data-wincu-unavailable':true},h('p',{role:'status'},props.t(state.status==='loading'?'loadingSettings':'notLoaded')),h('button',{type:'button',onClick:()=>window.location.reload()},props.t('reloadSettings')));
       return h(SettingsCard,props);
     }
+    // The banner text is saved with a default sentence, and that sentence was
+    // only ever Chinese. Show (and save) it in the interface language instead,
+    // so an English DSH does not keep a Chinese banner after the first save.
+    const INDICATOR_DEFAULTS=['DSH 正在控制电脑','DSH is controlling the computer'];
+    const localizeIndicator=(value,t)=>INDICATOR_DEFAULTS.includes(value.indicatorText)?{...value,indicatorText:t('indicatorTextDefault')}:value;
     function SettingsCard({scope,t,savePatch,as='li',idPrefix='wincu'}) {
       const state = React.useSyncExternalStore(listener => scope.subscribe(listener), () => scope.getSnapshot());
       const available=state.status===undefined?state.value!==undefined:state.status==='ready';
       const writable=available&&state.writable;
-      const saved = {...defaults,...state.value};
+      const saved = localizeIndicator({...defaults,...state.value},t);
       if(!state.value?.toolPreset||saved.toolPreset==='auto')saved.toolPreset=saved.enabledTools.length===allToolNames.length?'full':'custom';
       const [draft,setDraft] = React.useState(saved), [dirty,setDirty] = React.useState(false);
       const [saving,setSaving] = React.useState(false), [message,setMessage] = React.useState(''),[tone,setTone]=React.useState('');
@@ -547,6 +554,7 @@ window.__ModuleLoader__.load({
               field(title(t('position'),null,{id:idPrefix+'-position-label'}),h('div',{className:'wcu-segment',role:'radiogroup','aria-labelledby':idPrefix+'-position-label'},radio('indicatorPosition','top',t('top')),radio('indicatorPosition','bottom',t('bottom')))),
               field(title(t('delay'),'delayHint',{htmlFor:idPrefix+'-delay'}),h('div',{className:'wcu-number'},h('input',{className:'wcu-control',id:idPrefix+'-delay',type:'number',min:200,max:3000,step:100,value:draft.indicatorIdleMs,disabled:indicatorDisabled,onChange:e=>change('indicatorIdleMs',Number(e.target.value))}),h('span',null,t('ms')))),
               field(title(t('text'),null,{htmlFor:idPrefix+'-text'}),h('input',{className:'wcu-control wcu-text',id:idPrefix+'-text',type:'text',maxLength:120,value:draft.indicatorText,disabled:indicatorDisabled,onChange:e=>change('indicatorText',e.target.value)})),
+              field(title(t('overlayLanguage'),'overlayLanguageHint',{htmlFor:idPrefix+'-overlayLanguage'}),h('select',{className:'wcu-control',id:idPrefix+'-overlayLanguage',value:draft.overlayLanguage,disabled,onChange:e=>change('overlayLanguage',e.target.value)},...['auto','zh','en'].map(key=>h('option',{key,value:key},t('overlayLanguage_'+key))))),
               field(title(t('remoteVisible'),'remoteVisibleHint',{htmlFor:idPrefix+'-remoteIndicatorVisible'}),toggle('remoteIndicatorVisible','remoteVisible'))))),
         h('section',{className:'wcu-section','data-wincu-progress-settings':true,'aria-labelledby':idPrefix+'-progress-title'},
           head(idPrefix+'-progress-title','progressSettings',null,button('openProgress',{'data-wincu-open-progress':true,className:'wcu-small',disabled,onClick:openProgress})),

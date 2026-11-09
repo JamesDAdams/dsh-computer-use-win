@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6 — 2026-11-09
+
+- 提示条、鼠标标签和思考与操作浮窗的界面文字现在跟随 DSH 界面语言：英文界面下显示“DSH is controlling the computer”“Esc Stop”“DSH · step 3 · acting”“Step 3 · scroll the page”，中文界面保持不变。新增“浮窗与提示语言”设置（`overlayLanguage`，可选自动 / 简体中文 / English，默认自动）；“自动”读取 DSH 的语言偏好（设置 → 通用 → 语言），读到其他语言时使用英文；DSH 语言改变后 30 秒内自动跟上，修改语言会在当前动作结束后重连插件服务。接管提示的标语仍可自己填写，未改过时按界面语言显示默认句。设置页的提示文字一栏也按界面语言显示默认句。/ The banner, the pointer tag and the reasoning and progress overlay now follow the DSH interface language: an English DSH shows "DSH is controlling the computer", "Esc Stop", "DSH · step 3 · acting" and "Step 3 · scroll the page", while the Chinese interface is unchanged. New Overlay language setting (`overlayLanguage`: automatic, Simplified Chinese or English; automatic by default). Automatic reads DSH's language preference (Settings → General → Language) and uses English for any other language; a DSH language change is picked up within 30 seconds, and a language change reconnects the plugin after the current action finishes. The banner text stays editable, and the untouched default sentence now follows the interface language, in the settings field as well.
+
 ## 0.5.5 — 2026-11-06
 
 - 修复 DSH 0.2.2（npm 上 `@deepseek-ai/dsh` 的 next/latest）里拖动、缩放、锁定或关闭进度浮窗后设置存不下来，DSH 日志每 250 毫秒记一条“The overlay owner is no longer in the DSH profile.”，直到重启（[#72](https://github.com/Yu-tao-Li/dsh-computer-use-win/issues/72)）。0.2.2 的 Loader 在配置条目上保存的是插件 fiber 的包装对象，插件按 fiber 找自己的条目必定落空；现在先用 fiber 自带的条目，新旧两种形状都认。保存失败时从 0.5 秒起翻倍退避、最长 60 秒，新的布局立即重试；同一错误一分钟最多记一条；无法应用的布局补丁直接丢弃。已在真实的 0.2.1-rc.2 和 0.2.2-rc.1 宿主上验证。/ Fix overlay moves and resizes not being saved on DSH 0.2.2, whose Loader keeps a wrapper of the plugin's fiber on its entry, while an error was logged every 250 ms until restart. Saves now find the entry through the fiber and retry with backoff, and the same error is logged at most once a minute.

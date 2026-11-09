@@ -4,13 +4,12 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from '
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings.mjs';
+import { previewProgress, resolveOverlayLanguage } from './i18n.mjs';
 
 export const STOPPED = 'COMPUTER_USE_STOPPED_BY_USER: The user stopped this operation series with Esc or their custom shortcut. Do not retry desktop input in this turn. A new user turn, including a request to continue, can use the desktop automatically; no settings change is required.';
 const helperScript = fileURLToPath(new URL('../scripts/windows-takeover.ps1', import.meta.url));
 // What "Open overlay to adjust" shows: the same layout as a real run.
-export const PREVIEW_PROGRESS = Object.freeze({ step: 2, status: 'acting', tool: 'scroll', action: '滚动页面', steps: [
-  { step: 1, actions: [{ label: '打开新标签页', state: 'done' }], reasoning: '这里按步骤显示 DSH 的思考文字，和对话里看到的一致。', reply: '' },
-  { step: 2, actions: [{ label: '滚动页面', state: 'running' }], reasoning: '正文较长时可以滚动查看；回到底部后继续跟随新输出。', reply: '' }] });
+export const PREVIEW_PROGRESS = Object.freeze(previewProgress('zh'));
 
 // Windows refuses to replace a file that another process holds open without
 // delete sharing (a reader, an antivirus scan) for a moment, with EPERM, EACCES
@@ -72,6 +71,13 @@ export class TakeoverControl {
     atomicJson(this.stateFile, { paused: this.paused, active: this.active, seriesActive:this.seriesHeld,reason: reason ?? null,
       resumeToken: this.resumeToken,stoppedSeriesKey:this.stoppedSeriesKey,blockedSeries:Object.fromEntries(this.blockedSeries),pauseMessage: this.paused ? this.pauseMessage : null, updatedAt: new Date().toISOString() });
   }
+  // The helper process draws the banner, the pointer tag and the progress
+  // overlay itself, so it needs the language spelled out in every command:
+  // 'auto' follows the language the adapter read from DSH.
+  get language() { return resolveOverlayLanguage(this.config.overlayLanguage, process.env.WCU_UI_LANGUAGE); }
+  // Settings plus the resolved language, as the C# helper receives them.
+  commandConfig() { return { ...this.config, language: this.language }; }
+  previewProgress() { return previewProgress(this.language); }
   async resumeOperation(clearScope=true){
     if(this.child)await this.command('resume');
     this.paused=false;if(clearScope)this.stoppedSeriesKey=null;
@@ -100,7 +106,7 @@ export class TakeoverControl {
       // After the turn ends the overlay keeps showing its final state for a
       // short time; that holds no series, indicator or stop key.
       const lingering=!held&&!!activity.progress&&Number.isFinite(activity.lingerUntil)&&activity.lingerUntil>Date.now();
-      const progress=JSON.stringify({enabled:this.config.progressOverlayEnabled&&(held||lingering),remoteIndicatorVisible:this.config.remoteIndicatorVisible,settings:this.config,progress:{...activity.progress,status:this.paused&&held?'stopped':activity.progress?.status??'waiting'}});
+      const progress=JSON.stringify({enabled:this.config.progressOverlayEnabled&&(held||lingering),remoteIndicatorVisible:this.config.remoteIndicatorVisible,settings:this.commandConfig(),progress:{...activity.progress,status:this.paused&&held?'stopped':activity.progress?.status??'waiting'}});
       if(!this.disabledForTest&&this.sentProgress!==progress&&(this.child||(this.config.progressOverlayEnabled&&(held||lingering)))){
         await this.command('progress',JSON.parse(progress));this.sentProgress=progress;
       }
@@ -109,31 +115,31 @@ export class TakeoverControl {
         this.seriesKey=key;
         this.seriesHeld=held;this.seriesIndicator=indicator;
         if(!this.paused&&!this.blockedSeries.has(key)&&!this.disabledForTest){
-          if(indicator)await this.command('begin',this.config);
+          if(indicator)await this.command('begin',this.commandConfig());
           else if(this.shown===0&&this.child)await this.command('end');
         }
         this.persist();
       }
     }
-    const presentation=JSON.stringify([this.config.indicatorEnabled,this.config.cursorIndicatorEnabled,this.config.remoteIndicatorVisible,this.config.indicatorText,this.config.indicatorPosition,this.config.indicatorIdleMs,this.config.stopShortcut]);
+    const presentation=JSON.stringify([this.config.indicatorEnabled,this.config.cursorIndicatorEnabled,this.config.remoteIndicatorVisible,this.config.indicatorText,this.config.indicatorPosition,this.config.indicatorIdleMs,this.config.stopShortcut,this.language]);
     if (this.child && this.sentPresentation!==presentation) {
-      await this.command(((this.seriesHeld&&this.seriesIndicator)||this.shown>0)&&!this.paused&&!this.blockedSeries.has(this.seriesKey)?'begin':'configure', this.config);
+      await this.command(((this.seriesHeld&&this.seriesIndicator)||this.shown>0)&&!this.paused&&!this.blockedSeries.has(this.seriesKey)?'begin':'configure', this.commandConfig());
       this.sentPresentation=presentation;
       this.sentShortcut = this.config.stopShortcut; this.sentCursorIndicator = this.config.cursorIndicatorEnabled;this.sentRemoteVisible=this.config.remoteIndicatorVisible;
     }
     if (this.config.resumeToken !== this.resumeToken && this.active === 0) {
       if (this.child) await this.command('resume');
       this.resumeToken = this.config.resumeToken; this.paused = false;this.stoppedSeriesKey=null;this.blockedSeries.clear(); this.persist('resumed-by-user');
-      if(this.seriesHeld&&this.seriesIndicator&&!this.disabledForTest)await this.command('begin',this.config);
+      if(this.seriesHeld&&this.seriesIndicator&&!this.disabledForTest)await this.command('begin',this.commandConfig());
     }
     if (this.config.previewToken !== this.previewToken) {
       this.previewToken = this.config.previewToken;
       if(this.paused&&this.active===0&&!this.seriesHeld)await this.resumeOperation(false);
-      if (!this.paused && this.active === 0 && !this.disabledForTest) await this.command('preview', this.config);
+      if (!this.paused && this.active === 0 && !this.disabledForTest) await this.command('preview', this.commandConfig());
     }
     if(this.config.progressPreviewToken!==this.progressPreviewToken){
       this.progressPreviewToken=this.config.progressPreviewToken;
-      if(!this.disabledForTest&&this.progressPreviewToken>0)await this.command('progress',{enabled:true,preview:true,settings:this.config,remoteIndicatorVisible:this.config.remoteIndicatorVisible,progress:PREVIEW_PROGRESS});
+      if(!this.disabledForTest&&this.progressPreviewToken>0)await this.command('progress',{enabled:true,preview:true,settings:this.commandConfig(),remoteIndicatorVisible:this.config.remoteIndicatorVisible,progress:this.previewProgress()});
     }
   }
   // A quiet lease (browser-lane calls) checks the stopped state and counts as an
@@ -145,7 +151,7 @@ export class TakeoverControl {
     if (this.paused) throw new Error(this.pauseMessage);
     if (this.closed) throw new Error('COMPUTER_USE_STOPPING');
     if (!quiet&&!this.disabledForTest&&(!this.seriesHeld||!this.seriesIndicator||!this.child)) {
-      try { await this.command('begin', this.config); this.sentShortcut = this.config.stopShortcut; this.sentCursorIndicator = this.config.cursorIndicatorEnabled;this.sentRemoteVisible=this.config.remoteIndicatorVisible; }
+      try { await this.command('begin', this.commandConfig()); this.sentShortcut = this.config.stopShortcut; this.sentCursorIndicator = this.config.cursorIndicatorEnabled;this.sentRemoteVisible=this.config.remoteIndicatorVisible; }
       catch (error) { this.fail(error); throw error; }
     }
     if (this.paused) throw new Error(this.pauseMessage);

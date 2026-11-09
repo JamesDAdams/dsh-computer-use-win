@@ -185,6 +185,100 @@ namespace DshTakeover {
     public void Dispose() { disposed = true; if (threadId != 0) Native.PostThreadMessage(threadId, 0x12, IntPtr.Zero, IntPtr.Zero); }
   }
 
+  // On-screen copy for the banner, the pointer tag and the progress overlay.
+  // DSH is localized by its own locale service, which this helper process never
+  // sees, so every command carries the resolved language ('zh' or 'en'); the
+  // strings below are the only thing that changes. Chinese stays the default so
+  // a caller that sends no language behaves exactly as before.
+  internal static class OverlayText {
+    static volatile bool english;
+    internal static bool English { get { return english; } }
+    internal static void SetLanguage(string language) {
+      english = !String.IsNullOrEmpty(language) && language.StartsWith("en", StringComparison.OrdinalIgnoreCase);
+    }
+    // YaHei carries Chinese well; Segoe UI is the Windows interface face.
+    internal static string FontFamily { get { return english ? "Segoe UI" : "Microsoft YaHei UI"; } }
+    static string P(string zh, string en) { return english ? en : zh; }
+    internal static string Stop { get { return P("停止", "Stop"); } }
+    internal static string Banner(string text) {
+      // An empty value and the untouched Chinese default both mean "use the
+      // language's own sentence".
+      if (!english) return String.IsNullOrEmpty(text) ? "DSH 正在控制电脑" : text;
+      return String.IsNullOrWhiteSpace(text) || text == "DSH 正在控制电脑" ? "DSH is controlling the computer" : text;
+    }
+    internal static string Image(string alt) {
+      if (english) return alt.Trim() == "" ? "(image)" : "(image: " + alt.Trim() + ")";
+      return alt.Trim() == "" ? "（图片）" : "（图片：" + alt.Trim() + "）";
+    }
+    internal static string StepHeading(string step, System.Collections.Generic.List<string> labels) {
+      string joined = labels.Count > 0 ? " · " + String.Join(english ? ", " : "、", labels.ToArray()) : "";
+      return english ? "Step " + step + joined : "第 " + step + " 步" + joined;
+    }
+    internal static string ActionError { get { return P("（出错）", " (error)"); } }
+    internal static string Done(int step, string took) { return english ? "DSH · done · " + step + " step" + (step == 1 ? "" : "s") + took : "DSH · 已完成 · " + step + " 步" + took; }
+    internal static string Failed(int step) { return english ? "DSH · error · step " + step : "DSH · 出错 · 第 " + step + " 步"; }
+    internal static string Stopped(int step) { return english ? "DSH · stopped · step " + step : "DSH · 已停止 · 第 " + step + " 步"; }
+    internal static string Running(string step, string status) {
+      string state;
+      if (english) state = status == "thinking" ? "thinking" : status == "acting" ? "acting" : status == "replying" ? "replying" : status == "stopped" ? "stopped" : "working";
+      else state = status == "thinking" ? "思考中" : status == "acting" ? "执行中" : status == "replying" ? "回复中" : status == "stopped" ? "已停止" : "处理中";
+      return english ? "DSH · step " + step + " · " + state : "DSH · 第 " + step + " 步 · " + state;
+    }
+    internal static string Seconds(string value) { return english ? " · " + value + " s" : " · " + value + " 秒"; }
+    internal static string SummaryResult { get { return P("AI 总结 · 结果", "AI summary · result"); } }
+    internal static string SummaryStep(string step) { return english ? "AI summary · step " + step : "AI 总结 · 第 " + step + " 步"; }
+    internal static string SummaryUnavailable { get { return P("总结暂不可用，先显示操作步骤。", "Summaries are unavailable; showing the action steps instead."); } }
+    internal static string SummarizingResult { get { return P("正在总结结果…", "Summarizing the result…"); } }
+    internal static string Summarizing { get { return P("正在生成总结…", "Writing a summary…"); } }
+    internal static string Reply { get { return P("回复", "Reply"); } }
+    internal static string Reasoning { get { return P("思考", "Reasoning"); } }
+    internal static string Waiting { get { return P("等待 DSH 输出…", "Waiting for DSH output…"); } }
+    internal static string DragHint { get { return P("拖标题移动 · 边缘缩放 · 滚动查看", "Drag the title · resize at the edges · scroll to read"); } }
+    internal static string DragHintUnlocked { get { return P("拖标题移动 · 边缘缩放 · 移开后自动锁定", "Drag the title · resize at the edges · locks again when you leave"); } }
+    internal static string ToolLabel(string tool) {
+      if (english) switch (tool) {
+        case "snapshot": return "read the page";
+        case "screenshot": return "take a screenshot";
+        case "list_windows": return "find the browser or a window";
+        case "launch_app": return "open an app or web page";
+        case "scroll": return "scroll the page";
+        case "click": return "click";
+        case "double_click": return "double-click";
+        case "keypress": return "press keys";
+        case "type_text": return "type text";
+        case "set_value": return "fill in or choose a value";
+        case "wait": return "wait";
+        case "wait_for": return "wait for the interface";
+        case "batch": return "run several actions";
+        case "focus": return "move the focus";
+        case "find": return "find an element";
+        case "invoke": return "operate a control";
+        case "ocr": return "read screen text";
+        default: return tool;
+      }
+      switch (tool) {
+        case "snapshot": return "读取页面内容";
+        case "screenshot": return "截图查看";
+        case "list_windows": return "查找浏览器或窗口";
+        case "launch_app": return "打开应用或网页";
+        case "scroll": return "滚动页面";
+        case "click": return "点击";
+        case "double_click": return "双击";
+        case "keypress": return "按键";
+        case "type_text": return "输入文字";
+        case "set_value": return "填写或选择内容";
+        case "wait": return "等待";
+        case "wait_for": return "等待界面变化";
+        case "batch": return "连续执行操作";
+        case "focus": return "切换焦点";
+        case "find": return "查找元素";
+        case "invoke": return "操作控件";
+        case "ocr": return "识别屏幕文字";
+        default: return tool;
+      }
+    }
+  }
+
   internal sealed class Controller : ApplicationContext {
     readonly Control dispatcher = new Control();
     readonly EventWaitHandle cancel;
@@ -215,6 +309,7 @@ namespace DshTakeover {
     bool indicator = true, cursorIndicator = true, remoteVisible = true;
     int cursorError;
     string text = "DSH 正在控制电脑", position = "top";
+    string language = "zh";
     int idleMs = 800;
 
     internal Controller(string eventName, bool tests) {
@@ -298,7 +393,10 @@ namespace DshTakeover {
           ConfigureVisibility(Get(command,"remoteIndicatorVisible",true));
           cursorIndicator = Get(command, "cursorIndicatorEnabled", true);
           string nextText = Get(command, "indicatorText", "DSH 正在控制电脑"), nextPosition = Get(command, "indicatorPosition", "top");
-          bool rebuild = nextIndicator != indicator || nextText != text || nextPosition != position || frames.Count == 0;
+          string nextLanguage = Get(command, "language", language);
+          bool languageChanged = !String.Equals(nextLanguage, language, StringComparison.OrdinalIgnoreCase);
+          if (languageChanged) { language = nextLanguage; OverlayText.SetLanguage(language); }
+          bool rebuild = languageChanged || nextIndicator != indicator || nextText != text || nextPosition != position || frames.Count == 0;
           indicator = nextIndicator; text = nextText; position = nextPosition;
           idleMs = Math.Max(200, Math.Min(3000, Get(command, "indicatorIdleMs", 800)));
           armed = true; hideAt = action == "preview" ? DateTime.UtcNow.AddMilliseconds(1800) : DateTime.MaxValue;
@@ -324,6 +422,11 @@ namespace DshTakeover {
             object supplied;
             var data=command.TryGetValue("progress",out supplied)?supplied as Dictionary<string,object>:null;
             var settings=command.TryGetValue("settings",out supplied)?supplied as Dictionary<string,object>:null;
+            // The progress overlay carries the same language as the banner; a
+            // change redraws the header and headings already on screen.
+            string nextLanguage=settings!=null?Get(settings,"language",language):language;
+            bool languageChanged=!String.Equals(nextLanguage,language,StringComparison.OrdinalIgnoreCase);
+            if(languageChanged){language=nextLanguage;OverlayText.SetLanguage(language);}
             bool fresh=progress==null;
             if(fresh)progress=new ProgressFrame(delegate(Dictionary<string,object> patch,Dictionary<string,object> baseline){Emit(new {kind="progress-layout",patch=patch,@base=baseline});},delegate {Emit(new {kind="progress-layout",patch=new Dictionary<string,object>{{"progressOverlayEnabled",false}}});progressPreviewUntil=DateTime.MinValue;progressDismissed=true;CloseProgress();});
             progress.Configure(settings,Get(command,"remoteIndicatorVisible",true));
@@ -331,6 +434,7 @@ namespace DshTakeover {
             ConfigureShortcut(settings!=null?Get(settings,"progressLockShortcut",""):"");progressKey=stopKey;progressModifiers=stopModifiers;
             stopKey=savedKey;stopModifiers=savedModifiers;stopShortcut=savedShortcut;
             if(enabled)progress.UpdateProgress(data);
+            else if(languageChanged)progress.ReapplyLanguage();
             if(fresh)progress.Show();
             // The adjustment preview unlocks only while it lasts; the saved lock
             // state is untouched unless the user toggles it themselves.
@@ -383,6 +487,7 @@ namespace DshTakeover {
         } else if (action == "test_key" && testMode) {
           consumed = HandleKey(Get(command, "vk", 0), Get(command, "injected", false), Get(command, "down", true));
         } else if (action == "test_render" && testMode) {
+          OverlayText.SetLanguage(Get(command, "language", language));
           using (var image = Frame.Draw(1200, 675, Get(command, "indicatorText", text), Get(command, "indicatorPosition", "top"))) image.Save(Get(command, "path", ""), ImageFormat.Png);
         } else if (action == "test_render_pointer" && testMode) {
           float zoom=(float)Get(command,"scale",2.0);
@@ -521,6 +626,9 @@ namespace DshTakeover {
     internal double BackgroundOpacity=.6;
     Font bodyFont,headingFont,titleFont,footerFont;
     string header="",subheader="",bodyText="";
+    // The last state this window drew, so a language change can redraw the same
+    // content with the other language's words.
+    internal Dictionary<string,object> lastProgressData;
     string[] headings=new string[0];
     bool followOutput=true,remoteVisible=true,configuredLocked=true,configured,presenting,draggingThumb,revealedResult,previewUnlocked,hoverUnlocked,hoverBlocked=true,sizing;
     // Resting the pointer on the lock button this long unlocks the window; it
@@ -552,10 +660,17 @@ namespace DshTakeover {
     }
     void SetFonts(float next){
       if(bodyFont!=null){bodyFont.Dispose();headingFont.Dispose();titleFont.Dispose();footerFont.Dispose();}
-      scale=next;bodyFont=new Font("Microsoft YaHei UI",14.667f*scale,FontStyle.Regular,GraphicsUnit.Pixel);
-      headingFont=new Font("Microsoft YaHei UI",14.667f*scale,FontStyle.Bold,GraphicsUnit.Pixel);
-      titleFont=new Font("Microsoft YaHei UI",14*scale,FontStyle.Bold,GraphicsUnit.Pixel);
-      footerFont=new Font("Microsoft YaHei UI",11.5f*scale,FontStyle.Regular,GraphicsUnit.Pixel);
+      scale=next;string family=OverlayText.FontFamily;
+      bodyFont=new Font(family,14.667f*scale,FontStyle.Regular,GraphicsUnit.Pixel);
+      headingFont=new Font(family,14.667f*scale,FontStyle.Bold,GraphicsUnit.Pixel);
+      titleFont=new Font(family,14*scale,FontStyle.Bold,GraphicsUnit.Pixel);
+      footerFont=new Font(family,11.5f*scale,FontStyle.Regular,GraphicsUnit.Pixel);
+    }
+    // The language can change while the overlay is on screen; the words are
+    // recomputed from the last state and the fonts are measured again.
+    internal void ReapplyLanguage(){
+      SetFonts(scale);
+      if(lastProgressData!=null)UpdateProgress(lastProgressData);else Present();
     }
     void RefreshDpi(){
       float next=1;try{next=Native.GetDpiForWindow(Handle)/96f;}catch(EntryPointNotFoundException){}
@@ -698,7 +813,7 @@ namespace DshTakeover {
     static string Readable(string text){
       text=(text??"").Replace("\r","");
       text=System.Text.RegularExpressions.Regex.Replace(text,@"(?m)^[ \t]*```[^\n]*\n?","");
-      text=System.Text.RegularExpressions.Regex.Replace(text,@"!\[([^\]\n]*)\]\([^)\n]*\)",match=>match.Groups[1].Value.Trim()==""?"（图片）":"（图片："+match.Groups[1].Value.Trim()+"）");
+      text=System.Text.RegularExpressions.Regex.Replace(text,@"!\[([^\]\n]*)\]\([^)\n]*\)",match=>OverlayText.Image(match.Groups[1].Value));
       text=System.Text.RegularExpressions.Regex.Replace(text,@"\[([^\]\n]+)\]\([^)\n]*\)","$1");
       text=System.Text.RegularExpressions.Regex.Replace(text,@"(\*\*|__)(?=\S)(.+?)(?<=\S)\1","$2");
       text=System.Text.RegularExpressions.Regex.Replace(text,@"`([^`\n]+)`","$1");
@@ -713,27 +828,29 @@ namespace DshTakeover {
     void RevealResult(bool finished){
       if(!finished){revealedResult=false;return;}
       if(revealedResult||!followOutput)return;
-      int at=-1;for(int i=lines.Count-1;i>=0;i--)if(lines[i].heading&&lines[i].text=="回复"){at=i;break;}
+      int at=-1;for(int i=lines.Count-1;i>=0;i--)if(lines[i].heading&&lines[i].text==OverlayText.Reply){at=i;break;}
       if(at<0)return;
       revealedResult=true;
       if(TotalHeight-at*LineHeight>viewport.Height){scrollY=Math.Min(MaxScroll,at*LineHeight);followOutput=false;LayoutScrollbar();}
     }
-    // One heading per model step ("第 3 步 · 滚动页面"), then the text DSH showed
-    // for that step. Older steps keep only their last lines; the current step
-    // and the reply are shown in full.
+    // One heading per model step ("第 3 步 · 滚动页面" / "Step 3 · scroll the
+    // page"), then the text DSH showed for that step. Older steps keep only
+    // their last lines; the current step and the reply are shown in full.
     static string StepHeading(Dictionary<string,object> entry){
       var labels=new List<string>();
-      foreach(var action in Items(entry,"actions")){string label=TextValue(action,"label");if(label!="")labels.Add(label+(TextValue(action,"state")=="error"?"（出错）":""));}
-      return "第 "+TextValue(entry,"step")+" 步"+(labels.Count>0?" · "+String.Join("、",labels.ToArray()):"");
+      foreach(var action in Items(entry,"actions")){string label=TextValue(action,"label");if(label!="")labels.Add(label+(TextValue(action,"state")=="error"?OverlayText.ActionError:""));}
+      return OverlayText.StepHeading(TextValue(entry,"step"),labels);
     }
     internal void UpdateProgress(Dictionary<string,object> data){
+      lastProgressData=data;
       string status=TextValue(data,"status");
       string step=TextValue(data,"step");if(step==""||step=="0")step="1";
       long started=Whole(data,"startedAt"),ended=Whole(data,"endedAt");
       bool finished=ended>0&&(status=="done"||status=="failed"||status=="stopped");
-      string took=started>0&&ended>=started?" · "+Math.Max(1,(long)Math.Round((ended-started)/1000.0))+" 秒":"";
-      if(finished)header=status=="done"?"DSH · 已完成 · "+step+" 步"+took:status=="failed"?"DSH · 出错 · 第 "+step+" 步":"DSH · 已停止 · 第 "+step+" 步";
-      else header="DSH · 第 "+step+" 步 · "+(status=="thinking"?"思考中":status=="acting"?"执行中":status=="replying"?"回复中":status=="stopped"?"已停止":"处理中");
+      string seconds=started>0&&ended>=started?Convert.ToString(Math.Max(1,(long)Math.Round((ended-started)/1000.0))):"";
+      string took=seconds==""?"":OverlayText.Seconds(seconds);
+      if(finished)header=status=="done"?OverlayText.Done(Convert.ToInt32(step),took):status=="failed"?OverlayText.Failed(Convert.ToInt32(step)):OverlayText.Stopped(Convert.ToInt32(step));
+      else header=OverlayText.Running(step,status);
       string action=TextValue(data,"action");if(action=="")action=ToolLabel(TextValue(data,"tool"));
       subheader=finished?"":action;
       var steps=Items(data,"steps");var text=new List<string>();var heads=new List<string>();
@@ -742,32 +859,32 @@ namespace DshTakeover {
         // Summary mode: the AI summaries in order, newest last. Until the first
         // one arrives (or when the model is unavailable) the step names stand in.
         var summaries=Items(data,"summaries");string latest="";
-        foreach(var item in summaries){string value=Readable(TextValue(item,"text"));if(value==""||value==latest)continue;head(Flag(item,"final")?"AI 总结 · 结果":"AI 总结 · 第 "+TextValue(item,"step")+" 步");text.Add(value);latest=value;}
+        foreach(var item in summaries){string value=Readable(TextValue(item,"text"));if(value==""||value==latest)continue;head(Flag(item,"final")?OverlayText.SummaryResult:OverlayText.SummaryStep(TextValue(item,"step")));text.Add(value);latest=value;}
         bool finalSummary=summaries.Count>0&&Flag(summaries[summaries.Count-1],"final");
         if(latest==""){
           foreach(var entry in steps)head(StepHeading(entry));
           string summaryStatus=TextValue(data,"summaryStatus");
-          text.Add(summaryStatus=="unavailable"?"总结暂不可用，先显示操作步骤。":finished?"正在总结结果…":"正在生成总结…");
+          text.Add(summaryStatus=="unavailable"?OverlayText.SummaryUnavailable:finished?OverlayText.SummarizingResult:OverlayText.Summarizing);
         }
         string reply=Readable(steps.Count>0?TextValue(steps[steps.Count-1],"reply"):TextValue(data,"reply"));
-        if(finished&&!finalSummary&&reply!=""&&TextValue(data,"summaryStatus")!="working"){head("回复");text.Add(reply);}
+        if(finished&&!finalSummary&&reply!=""&&TextValue(data,"summaryStatus")!="working"){head(OverlayText.Reply);text.Add(reply);}
       } else if(steps.Count>0){
         int shown=Math.Max(0,steps.Count-12);
         for(int i=shown;i<steps.Count;i++){
           var entry=steps[i];bool current=i==steps.Count-1;head(StepHeading(entry));
           string reasoning=Readable(TextValue(entry,"reasoning")),reply=Readable(TextValue(entry,"reply"));
           if(reasoning!="")text.Add(current?reasoning:Shorten(reasoning,240));
-          if(reply!=""){head("回复");text.Add(reply);}
+          if(reply!=""){head(OverlayText.Reply);text.Add(reply);}
         }
       } else {
         string reasoning=Readable(TextValue(data,"reasoning")),reply=Readable(TextValue(data,"reply"));
-        if(reasoning!=""){head("思考");text.Add(reasoning);}
-        if(reply!=""){head("回复");text.Add(reply);}
+        if(reasoning!=""){head(OverlayText.Reasoning);text.Add(reasoning);}
+        if(reply!=""){head(OverlayText.Reply);text.Add(reply);}
       }
-      bodyText=text.Count>0?String.Join("\n",text.ToArray()):"等待 DSH 输出…";headings=heads.ToArray();
+      bodyText=text.Count>0?String.Join("\n",text.ToArray()):OverlayText.Waiting;headings=heads.ToArray();
       Content=header+"\n"+subheader+"\n\n"+bodyText;LayoutBody();RevealResult(finished);Present();
     }
-    static string ToolLabel(string tool){switch(tool){case "snapshot":return "读取页面内容";case "screenshot":return "截图查看";case "list_windows":return "查找浏览器或窗口";case "launch_app":return "打开应用或网页";case "scroll":return "滚动页面";case "click":return "点击";case "double_click":return "双击";case "keypress":return "按键";case "type_text":return "输入文字";case "set_value":return "填写或选择内容";case "wait":return "等待";case "wait_for":return "等待界面变化";case "batch":return "连续执行操作";case "focus":return "切换焦点";case "find":return "查找元素";case "invoke":return "操作控件";case "ocr":return "识别屏幕文字";default:return tool;}}
+    static string ToolLabel(string tool){return OverlayText.ToolLabel(tool);}
     // A dark halo under light text keeps it readable when a bright page shows
     // through the translucent background.
     static void Shadowed(Graphics g,string text,Font font,Brush brush,Brush shadow,RectangleF where,StringFormat format,float offset){
@@ -803,7 +920,7 @@ namespace DshTakeover {
           var clip=g.Save();g.SetClip(viewport);int first=scrollY/LineHeight,last=Math.Min(lines.Count,(scrollY+viewport.Height)/LineHeight+1);
           for(int i=first;i<last;i++){var line=lines[i];Font font=line.heading?headingFont:bodyFont;Brush brush=line.heading?muted:fg;float x=viewport.X,y=viewport.Y+i*LineHeight-scrollY;g.DrawString(line.text,font,shadow,new PointF(x+halo,y+halo),format);g.DrawString(line.text,font,brush,new PointF(x,y),format);}
           g.Restore(clip);
-          if(!Locked)Shadowed(g,hoverUnlocked?"拖标题移动 · 边缘缩放 · 移开后自动锁定":"拖标题移动 · 边缘缩放 · 滚动查看",footerFont,muted,shadow,new RectangleF(Px(12),Height-Px(22),Math.Max(10,Width-Px(24)),Px(20)),format,halo);
+          if(!Locked)Shadowed(g,hoverUnlocked?OverlayText.DragHintUnlocked:OverlayText.DragHint,footerFont,muted,shadow,new RectangleF(Px(12),Height-Px(22),Math.Max(10,Width-Px(24)),Px(20)),format,halo);
         }
         // The translucent scrollbar appears only when there is more to read.
         if(MaxScroll>0){
@@ -1027,17 +1144,18 @@ namespace DshTakeover {
           using (var pen = new Pen(color,1)) g.DrawRectangle(pen,i,i,width-2*i-1,height-2*i-1);
         }
         g.CompositingMode = CompositingMode.SourceOver;
-        // Status pill: live dot, the user's text, then an Esc keycap.
-        using (var font = new Font("Microsoft YaHei UI",10.5f*scale,FontStyle.Regular,GraphicsUnit.Point))
+        // Status pill: live dot, the banner text, then an Esc keycap. The words
+        // follow the overlay language this helper was told about.
+        string banner = OverlayText.Banner(text), hint = OverlayText.Stop;
+        using (var font = new Font(OverlayText.FontFamily,10.5f*scale,FontStyle.Regular,GraphicsUnit.Point))
         using (var keyFont = new Font("Segoe UI",8.5f*scale,FontStyle.Bold,GraphicsUnit.Point))
-        using (var hintFont = new Font("Microsoft YaHei UI",9.5f*scale,FontStyle.Regular,GraphicsUnit.Point))
+        using (var hintFont = new Font(OverlayText.FontFamily,9.5f*scale,FontStyle.Regular,GraphicsUnit.Point))
         using (var measure = new StringFormat(StringFormat.GenericTypographic) { FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.MeasureTrailingSpaces }) {
-          const string hint = "停止";
           float pillHeight=40*scale, padding=16*scale, dot=8*scale, gap=10*scale, keyHeight=20*scale;
           float keyWidth=g.MeasureString("Esc",keyFont,PointF.Empty,measure).Width+12*scale;
           float hintWidth=g.MeasureString(hint,hintFont,PointF.Empty,measure).Width;
           float fixedWidth=padding*2+dot+gap*3+1+keyWidth+6*scale+hintWidth;
-          float textWidth=Math.Min(g.MeasureString(text,font,PointF.Empty,measure).Width,Math.Max(48*scale,width-48*scale-fixedWidth));
+          float textWidth=Math.Min(g.MeasureString(banner,font,PointF.Empty,measure).Width,Math.Max(48*scale,width-48*scale-fixedWidth));
           float pillWidth=fixedWidth+textWidth;
           float x=(float)Math.Round((width-pillWidth)/2), y=position=="bottom"?height-pillHeight-24*scale:24*scale, middle=y+pillHeight/2;
           for (int i=1;i<=6;i++)
@@ -1053,7 +1171,7 @@ namespace DshTakeover {
           cursor+=dot+gap;
           using (var brush=new SolidBrush(Color.FromArgb(255,245,247,250)))
           using (var format=new StringFormat(StringFormat.GenericTypographic) { LineAlignment=StringAlignment.Center, Trimming=StringTrimming.EllipsisCharacter, FormatFlags=StringFormatFlags.NoWrap })
-            g.DrawString(text,font,brush,new RectangleF(cursor,y,textWidth+1,pillHeight),format);
+            g.DrawString(banner,font,brush,new RectangleF(cursor,y,textWidth+1,pillHeight),format);
           cursor+=textWidth+gap;
           using (var line=new Pen(Color.FromArgb(56,255,255,255),1)) g.DrawLine(line,cursor,middle-8*scale,cursor,middle+8*scale);
           cursor+=1+gap;

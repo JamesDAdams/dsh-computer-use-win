@@ -7,6 +7,7 @@ import path from 'node:path';
 import { DEFAULT_SETTINGS, normalizeSettings, enabledToolsForSettings, toolSelectionKey, STOP_SHORTCUT_PATTERN, TOOL_NAMES, BROWSER_APPS, repairStaleSettings } from './settings.mjs';
 import { atomicJson } from './takeover.mjs';
 import { installActivity } from './activity.mjs';
+import { OVERLAY_LANGUAGES, detectUiLanguage, resolveOverlayLanguage } from './i18n.mjs';
 
 export const name = 'windows-computer-use';
 export const inject = ['tools'];
@@ -37,6 +38,7 @@ const fields = {
   indicatorEnabled: z.boolean().default(true).description('接管提示 / Takeover indicator'),
   cursorIndicatorEnabled: z.boolean().default(true).description('鼠标指示 / Pointer indicator'),
   remoteIndicatorVisible: z.boolean().default(true).description('远程与录屏可见 / Visible in remote sessions and recordings'),
+  overlayLanguage: z.union(OVERLAY_LANGUAGES.map(value=>z.const(value))).default('auto').description('浮窗与提示语言 / Overlay language'),
   indicatorText: z.string().default(DEFAULT_SETTINGS.indicatorText).description('提示文字 / Banner text'),
   indicatorPosition: z.union([z.const('top'),z.const('bottom')]).default('top').description('提示位置 / Banner position'),
   indicatorIdleMs: z.number().min(200).max(3000).default(800).description('结束后隐藏延时（毫秒） / Hide delay (ms)'),
@@ -125,7 +127,7 @@ export function bridgeConfig(config = {}, runtime = {}) {
   return {
     serverName: 'wincu', transport: 'stdio', command: process.execPath,
     args: [fileURLToPath(new URL('./server.mjs', import.meta.url))],
-    env: { ELECTRON_RUN_AS_NODE: '1', WCU_IMAGE_MODE: 'file', WCU_BROWSER_ATTACH_USER: settings.browserAttachUser?'1':'0', WCU_BROWSER_HEADLESS: settings.browserVisible?'0':'1', WCU_BROWSER_APP: settings.browserApp, WCU_BROWSER_SIGNIN: settings.browserSignIn?'1':'0', WCU_TOOL_MODE: settings.toolPreset==='lazy'?'lazy':settings.mode, WCU_ENABLED_TOOLS: JSON.stringify(enabledToolsForSettings(settings)), WCU_SETTINGS_JSON: JSON.stringify(settings),
+    env: { ELECTRON_RUN_AS_NODE: '1', WCU_IMAGE_MODE: 'file', WCU_UI_LANGUAGE: runtime.uiLanguage ?? '', WCU_BROWSER_ATTACH_USER: settings.browserAttachUser?'1':'0', WCU_BROWSER_HEADLESS: settings.browserVisible?'0':'1', WCU_BROWSER_APP: settings.browserApp, WCU_BROWSER_SIGNIN: settings.browserSignIn?'1':'0', WCU_TOOL_MODE: settings.toolPreset==='lazy'?'lazy':settings.mode, WCU_ENABLED_TOOLS: JSON.stringify(enabledToolsForSettings(settings)), WCU_SETTINGS_JSON: JSON.stringify(settings),
       ...(runtime.configFile ? { WCU_CONFIG_FILE: runtime.configFile, WCU_STATE_FILE: runtime.stateFile } : {}),
       ...(runtime.activityFile ? {WCU_ACTIVITY_FILE:runtime.activityFile}: {}),
       ...(runtime.layoutFile ? {WCU_LAYOUT_FILE:runtime.layoutFile}: {}),
@@ -156,8 +158,14 @@ export async function apply(ctx, config) {
   liveAdapters.add(self); ctx.effect(() => () => { liveAdapters.delete(self); });
   if (liveAdapters.size > 1) ctx.logger.warn('dsh-computer-use-win: %d entries of this plugin run in one profile, and DSH keeps only one set of mcp__wincu tools. Remove the extra entry from dsh.profile.bundles in the profile package.json or from its cordis.patch.yml.', liveAdapters.size);
   let desired = normalizeSettings(config), runningSelection, connection, stopped = false;
-  installActivity(ctx,runtime.activityFile,{getSettings:()=>desired});
+  // Language the overlay copy is drawn in. The explicit setting wins; 'auto'
+  // follows the DSH interface language, read here and refreshed in the poll.
+  let uiLanguage = detectUiLanguage(ctx);
+  runtime.uiLanguage = uiLanguage;
+  const overlayLanguage = () => resolveOverlayLanguage(desired.overlayLanguage, uiLanguage);
+  installActivity(ctx,runtime.activityFile,{getSettings:()=>desired,getLanguage:overlayLanguage});
   let updates = Promise.resolve();
+  let settingsService, nextLanguageCheck = 0;
   let saveOverlayPatch, layoutId, layoutSaving = false, layoutRetry = { id: undefined, at: 0, delay: 0 };
   atomicJson(runtime.configFile, desired);
   ctx.effect(() => () => { stopped = true; });
@@ -170,7 +178,11 @@ export async function apply(ctx, config) {
     const pending = updates.then(async () => {
       if (!connection || stopped) return;
       await connection.await();
-      const nextSelection=toolSelectionKey(nextSettings);
+      // The overlay language travels in the child's environment, so it belongs
+      // in the selection key: a DSH language change reconnects the server. The
+      // overlayLanguage choice itself reaches the server through the settings
+      // file, so changing only that does not need a reconnect.
+      const nextSelection=toolSelectionKey(nextSettings)+'|'+uiLanguage;
       if (stopped || runningSelection === nextSelection) return;
       const deadline = Date.now() + 65000;
       for (;;) {
@@ -218,10 +230,21 @@ export async function apply(ctx, config) {
       // The raw entry still holds any value the validator reset; reset it here too.
       try {const next=normalizeSettings({...config,...repairStaleSettings(ctx.fiber.entry?.options?.config).value});if(JSON.stringify(next)!==JSON.stringify(desired))applySettings(next).catch(logError);}
       catch(error){logError(error);}
+      // DSH's language can change while the plugin runs (Settings > General >
+      // Language). Looking it up again is cheap and rare: every 30 seconds.
+      if(Date.now()>=nextLanguageCheck){
+        nextLanguageCheck=Date.now()+30000;
+        const detected=detectUiLanguage(ctx,settingsService);
+        if(detected&&detected!==uiLanguage){
+          uiLanguage=detected;runtime.uiLanguage=detected;
+          applySettings(desired).catch(logError);
+        }
+      }
     },250);
     timer.unref(); return ()=>clearInterval(timer);
   });
   ctx.inject(['settings'], settingsContext => {
+    settingsService = settingsContext.settings;
     if (typeof settingsContext.settings.register !== 'function') {
       if(typeof settingsContext.settings.update==='function')settingsContext.inject(['configEditor'],owner=>{
         // DSH 0.2.2's Loader (cordis 4.1) keeps a wrapper of the plugin's fiber

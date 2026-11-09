@@ -37,6 +37,7 @@ const suites = [
   ['browser-attach-user', process.execPath, ['test/browser-attach-user.mjs']],
   ['progress-overlay', process.execPath, ['test/progress-overlay.mjs']],
   ['progress-summary', process.execPath, ['test/progress-summary.mjs']],
+  ['overlay-language', process.execPath, ['test/overlay-language.mjs']],
   ['progress-reading', process.execPath, ['test/progress-reading.mjs']],
   ['activation-cancellation', process.execPath, ['test/activation-cancellation.mjs']],
   ['native-window-discovery', process.execPath, ['test/native-window-discovery.mjs']],
